@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export function middleware(req) {
   const { pathname } = req.nextUrl;
-  if (pathname.startsWith('/_next') || pathname.startsWith('/api/login') || pathname === '/login' || pathname.startsWith('/favicon')) {
+  if (pathname.startsWith('/_next') || pathname.startsWith('/api') || pathname === '/login' || pathname.startsWith('/favicon')) {
     return NextResponse.next();
   }
   const authed = req.cookies.get('task_auth')?.value === 'ok';
@@ -12,4 +12,4 @@ export function middleware(req) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ['/((?!api/tasks).*)'] };
+export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'] };
