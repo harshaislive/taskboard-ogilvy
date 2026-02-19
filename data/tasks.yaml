@@ -1,0 +1,26 @@
+updated_at: 2026-02-19T19:30:00Z
+tasks:
+  - id: t-001
+    title: Finalize Blyton SEO keyword map
+    status: in_progress
+    due: 2026-02-21
+    owner: Harsha
+    framework: { reach: 4, impact: 5, confidence: 4, effort: 2 }
+  - id: t-002
+    title: Secure GMB ownership access handoff
+    status: todo
+    due: 2026-02-22
+    owner: Aranya
+    framework: { reach: 3, impact: 5, confidence: 4, effort: 2 }
+  - id: t-003
+    title: Launch inventory-gated search ads
+    status: todo
+    due: 2026-02-25
+    owner: Seshu
+    framework: { reach: 5, impact: 5, confidence: 3, effort: 4 }
+  - id: t-004
+    title: Weekly review of lead quality
+    status: done
+    due: 2026-02-19
+    owner: Harsha
+    framework: { reach: 2, impact: 3, confidence: 5, effort: 1 }
