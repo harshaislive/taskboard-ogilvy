@@ -1,5 +1,6 @@
 import { loadTasks } from '@/lib/tasks';
 
 export async function GET() {
-  return Response.json(loadTasks());
+  const data = await loadTasks();
+  return Response.json(data);
 }
