@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 const labels = { todo: 'To Do', in_progress: 'In Progress', done: 'Done', blocked: 'Blocked' };
+const statusColors = { todo: '#f59e0b', in_progress: '#3b82f6', done: '#10b981', blocked: '#ef4444' };
 const IST = 'Asia/Kolkata';
 
 function parseDue(task) {
@@ -23,28 +24,42 @@ function formatDue(task) {
     weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: IST
   }).format(dueDate);
 
-  if (dayDiff === 0) return `Today, ${human.split(',').slice(1).join(',').trim()} IST`;
-  if (dayDiff === 1) return `Tomorrow, ${human.split(',').slice(1).join(',').trim()} IST`;
-  if (dayDiff < 0) return `Overdue · ${human} IST`;
-  return `${human} IST`;
+  if (dayDiff === 0) return `Today, ${human.split(',').slice(1).join(',').trim()}`;
+  if (dayDiff === 1) return `Tomorrow, ${human.split(',').slice(1).join(',').trim()}`;
+  if (dayDiff < 0) return `Overdue`;
+  return human.split(',').slice(1).join(',').trim();
 }
 
 export default function HomePage() {
   const [data, setData] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [view, setView] = useState('list'); // 'list' or 'board'
   const [activeTask, setActiveTask] = useState(null);
   const [comments, setComments] = useState([]);
   const [commentBody, setCommentBody] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     fetch('/api/tasks').then((r) => r.json()).then(setData);
-  }, []);
+  }, [refreshKey]);
 
   async function openTask(task) {
     setActiveTask(task);
     const res = await fetch(`/api/tasks/${task.id}/comments`);
     const j = await res.json();
     setComments(j.comments || []);
+  }
+
+  async function updateTaskStatus(taskId, newStatus) {
+    await fetch(`/api/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+    setRefreshKey(k => k + 1);
+    if (activeTask?.id === taskId) {
+      setActiveTask({ ...activeTask, status: newStatus });
+    }
   }
 
   async function postComment(e) {
@@ -66,13 +81,33 @@ export default function HomePage() {
     return data.tasks.filter((t) => t.status === filter);
   }, [data, filter]);
 
-  if (!data) return <main className="wrap"><p>Loading…</p></main>;
+  // Group tasks by status for Kanban
+  const tasksByStatus = useMemo(() => {
+    if (!data) return {};
+    const groups = { todo: [], in_progress: [], blocked: [], done: [] };
+    data.tasks.forEach(t => {
+      if (groups[t.status]) groups[t.status].push(t);
+    });
+    return groups;
+  }, [data]);
+
+  if (!data) return <main className="wrap"><p className="loading">Loading…</p></main>;
 
   return (
     <main className="wrap">
       <header className="top">
         <h1>Taskboard</h1>
-        <button className="ghost" onClick={() => fetch('/api/logout', { method: 'POST' }).then(() => (window.location.href = '/login'))}>Sign out</button>
+        <div className="headerActions">
+          <div className="viewToggle">
+            <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </button>
+            <button className={view === 'board' ? 'active' : ''} onClick={() => setView('board')}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>
+            </button>
+          </div>
+          <button className="ghost" onClick={() => fetch('/api/logout', { method: 'POST' }).then(() => (window.location.href = '/login'))}>Sign out</button>
+        </div>
       </header>
 
       <section className="summary">
@@ -82,44 +117,77 @@ export default function HomePage() {
         <div><strong>{data.summary.done}</strong><span>Done</span></div>
       </section>
 
-      <nav className="filters">
-        {['all', 'todo', 'in_progress', 'blocked', 'done'].map((f) => (
-          <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? 'All' : labels[f]}</button>
-        ))}
-      </nav>
+      {view === 'list' ? (
+        <>
+          <nav className="filters">
+            {['all', 'todo', 'in_progress', 'blocked', 'done'].map((f) => (
+              <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? 'All' : labels[f]}</button>
+            ))}
+          </nav>
 
-      <section className="list">
-        {tasks.map((t) => (
-          <article key={t.id} className="row" onClick={() => openTask(t)}>
-            <div className="main">
-              <h3>{t.title}</h3>
-              <p>{t.owner}</p>
-              <div className="due">Due: {formatDue(t)}</div>
+          <section className="list">
+            {tasks.length === 0 ? <p className="empty">No tasks found</p> : tasks.map((t) => (
+              <article key={t.id} className="row" onClick={() => openTask(t)}>
+                <div className="main">
+                  <h3>{t.title}</h3>
+                  <p>{t.owner}</p>
+                  <div className="due" data-overdue={parseDue(t) && parseDue(t) < new Date()}>📅 {formatDue(t)}</div>
+                </div>
+                <div className="meta">
+                  <span className="status" style={{ background: statusColors[t.status] + '20', color: statusColors[t.status] }}>{labels[t.status]}</span>
+                  <span className="score">#{t.score}</span>
+                </div>
+              </article>
+            ))}
+          </section>
+        </>
+      ) : (
+        <section className="board">
+          {['todo', 'in_progress', 'blocked', 'done'].map(status => (
+            <div key={status} className="boardColumn">
+              <div className="columnHeader">
+                <span className="columnDot" style={{ background: statusColors[status] }}></span>
+                <span>{labels[status]}</span>
+                <span className="columnCount">{tasksByStatus[status]?.length || 0}</span>
+              </div>
+              <div className="columnContent">
+                {(tasksByStatus[status] || []).map(t => (
+                  <article key={t.id} className="boardCard" onClick={() => openTask(t)}>
+                    <h4>{t.title}</h4>
+                    <p>{t.owner}</p>
+                    <div className="cardFooter">
+                      <span className="due">📅 {formatDue(t)}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </div>
-            <div className="meta">
-              <span className="status">{labels[t.status]}</span>
-              <span className="score">Score {t.score}</span>
-            </div>
-          </article>
-        ))}
-      </section>
+          ))}
+        </section>
+      )}
 
       {activeTask && (
         <section className="commentsPanel">
           <div className="commentsHeader">
             <h2>{activeTask.title}</h2>
-            <button className="ghost" onClick={() => setActiveTask(null)}>Close</button>
+            <button className="ghost closeBtn" onClick={() => setActiveTask(null)}>✕</button>
+          </div>
+          <div className="taskStatusBar">
+            <span>Status:</span>
+            <select value={activeTask.status} onChange={(e) => updateTaskStatus(activeTask.id, e.target.value)}>
+              {Object.entries(labels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
           </div>
           <div className="commentsList">
-            {comments.map((c) => (
-              <div key={c.id} className="commentItem">
-                <div className="commentMeta">{c.author} · {new Date(c.created_at).toLocaleString('en-IN', { timeZone: IST })}</div>
-                <div>{c.body}</div>
+            {comments.length === 0 ? <p className="emptyComments">No comments yet</p> : comments.map((c) => (
+              <div key={c.id} className="commentItem" data-author={c.author}>
+                <div className="commentMeta"><strong>{c.author}</strong> · {new Date(c.created_at).toLocaleString('en-IN', { timeZone: IST, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                <div className="commentBody">{c.body}</div>
               </div>
             ))}
           </div>
           <form onSubmit={postComment} className="commentForm">
-            <input value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Add note or command (e.g. @TARS draft reply to Aranya)" />
+            <input value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Add note or @TARS command..." />
             <button type="submit">Post</button>
           </form>
         </section>
